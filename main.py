@@ -1,6 +1,8 @@
 from flask import Flask, request, redirect, render_template, session, flash
 from flask_sqlalchemy import SQLAlchemy
 from hashutils import make_pw_hash, check_pw_hash
+from datetime import datetime
+from sqlalchemy import desc
 import os
 
 app = Flask(__name__)
@@ -25,13 +27,15 @@ class Blog(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(120), unique=True)
-    body = db.Column(db.String(1000))
+    body = db.Column(db.Text, nullable=False)
     owner_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    pub_date = db.Column(db.DateTime, nullable=False, default=datetime.utcnow())
 
-    def __init__(self, title, body, owner):
+    def __init__(self, title, body, owner, pub_date):
         self.title = title
         self.body = body
         self.owner = owner
+        self.pub_date = pub_date
 
 
 @app.before_request
@@ -47,12 +51,14 @@ def login():
         email = request.form['email']
         password = request.form['password']
         user = User.query.filter_by(email=email).first()
-        if user and check_pw_hash(password, user.pw_hash):
-            session['email'] = email
-            flash("Logged in", 'info')
-            return redirect('/')
+        if user:
+            if check_pw_hash(password, user.pw_hash):
+                session['email'] = email
+                flash("Logged in", 'info')
+                return redirect('/')
+            flash('Password for ' + email + ' is incorrect...')
         else:
-            flash('User password incorrect, or user does not exist', 'danger')
+            flash('User: [' + email + '] does not exist...', 'danger')
 
     return render_template('login.html')
 
@@ -89,8 +95,9 @@ def logout():
 def index():
 
      owner = User.query.filter_by(email=session['email']).first()
-     posts = Blog.query.filter_by(owner=owner).all()
-     return render_template('posts.html', title="Build-a-Blog!", posts=posts)
+    #  posts = Blog.query.filter_by(owner=owner).all()
+     posts = Blog.query.filter_by(owner=owner).order_by(desc('pub_date')).all()
+     return render_template('posts.html', title="Build-a-Blog!", posts=posts, owner=owner)
 
 @app.route('/newpost', methods=['POST', 'GET'])
 def newpost():
@@ -100,13 +107,14 @@ def newpost():
     if request.method == 'POST':
         post_title = request.form['title']
         post_body = request.form['body']
+        pub_date = datetime.utcnow()
         if not not_empty(post_title):
             flash('Please enter a title')
             return redirect('/newpost')
         if not not_empty(post_body):
             flash('Please enter some text in the body')
             return redirect('/newpost')
-        new_post = Blog(post_title, post_body, owner)
+        new_post = Blog(post_title, post_body, owner, pub_date)
         db.session.add(new_post)
         db.session.commit()
         id = new_post.id
@@ -127,11 +135,11 @@ def not_empty(string):
 @app.route('/blog', methods=['GET'])
 def blog():
     owner = User.query.filter_by(email=session['email']).first()
-    posts = Blog.query.filter_by(owner=owner).all()
+    posts = Blog.query.filter_by(owner=owner).order_by(desc('pub_date')).all()
     if request.args:
         id = request.args.get('id', type=int)
         post = Blog.query.get(id)
-        return render_template('blog.html',title=post.title, post=post)
+        return render_template('blog.html',title=post.title, post=post, owner=owner)
     
     
     # if not_empty(id):
@@ -139,7 +147,7 @@ def blog():
     #     return render_template('blog.html', title=post.title, post=post)
     
     return render_template('posts.html', title="Posts!",
-                           posts=posts)
+                           posts=posts, owner=owner)
 
 @app.route('/delete-task', methods=['POST'])
 def delete_task():
