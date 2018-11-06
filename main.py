@@ -96,7 +96,7 @@ def index():
 
      owner = User.query.filter_by(email=session['email']).first()
     #  posts = Blog.query.filter_by(owner=owner).all()
-     posts = Blog.query.filter_by(owner=owner).order_by(desc('pub_date')).all()
+     posts = Blog.query.filter_by(owner=owner).order_by('pub_date DESC').all()
      return render_template('posts.html', title="Build-a-Blog!", posts=posts, owner=owner)
 
 @app.route('/newpost', methods=['POST', 'GET'])
@@ -109,11 +109,11 @@ def newpost():
         post_body = request.form['body']
         pub_date = datetime.utcnow()
         if not not_empty(post_title):
-            flash('Please enter a title')
-            return redirect('/newpost')
+            flash('Please enter a title', 'danger')
+            return render_template('newpost.html', title="Posts!", post_body=post_body)
         if not not_empty(post_body):
-            flash('Please enter some text in the body')
-            return redirect('/newpost')
+            flash('Please enter some text in the body', 'danger')
+            return render_template('newpost.html', title="Posts!", post_title=post_title)
         new_post = Blog(post_title, post_body, owner, pub_date)
         db.session.add(new_post)
         db.session.commit()
@@ -122,9 +122,8 @@ def newpost():
         return redirect(url)
         
 
-    posts = Blog.query.filter_by(owner=owner).all()
-    return render_template('newpost.html', title="Posts!",
-                           posts=posts)
+    
+    return render_template('newpost.html', title="Posts!")
 def not_empty(string):
     if string == '':
         return False
